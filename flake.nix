@@ -6,22 +6,28 @@
   outputs =
     { nixpkgs, ... }@inputs:
     let
+      # supported systems
       systems = [
         "x86_64-linux"
         "aarch64-linux"
         "aarch64-darwin"
         "aarch64-linux"
       ];
+      # supported pythons :
+      pythons =  [ "python310" "python311" "python312"];
       # define system flake
       flake = system :
         let 
           pkgs = nixpkgs.legacyPackages.${system};
+          # adding pycall to python packages :
+          pythonOverride = python : python.override {
+             packageOverrides = final: prev: {
+                     pycall = final.callPackage ./nix/package.nix { inherit python; };
+             };
+          };
+        
         in {
-        legacyPackages.${system}    = builtins.listToAttrs 
-        # for each version provide a package
-        ( map (x : { name = x.name ; value = { pycall = pkgs.callPackage ./nix/package.nix {python = x;};};})
-        # supported python versions :
-        [ pkgs.python310 pkgs.python311 pkgs.python312] );
+        packages.${system}  = builtins.listToAttrs (map (x: {name = x; value = pythonOverride (builtins.getAttr x pkgs);}) pythons);
         
         # default shell, uses 
         devShells.${system}.default = pkgs.callPackage ./nix/shell.nix  {python = pkgs.python311;};
