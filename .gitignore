@@ -1,4 +1,7 @@
+# python build folders
 dist
 build
 */__pycache__
 *.spec
+# nix build folder
+result
