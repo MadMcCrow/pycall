@@ -11,7 +11,6 @@ import locale
 
 
 # ours
-from .callback import Callback
 from .throbber import Throbber
 from .output   import Output
 
@@ -22,14 +21,20 @@ class Daemon() :
     """
 
     args : list
-    __callback : Callback
-    __errcallback : Callback
+    __callback : Callable
+    __errcallback : Callable
 
-    def __init__(self, cmd, name = None, out_func = None, err_func = None ) :
+    def __init__(self, cmd, *, 
+            name = None, 
+            out_func : None | Callable = None,
+            err_func : None | Callable = None ) :
+        """
+            create an run Daemon process
+        """
         # copy arguments :
         self.args = shlex.split(cmd)
-        self.__callback = Callback(out_func)
-        self.__errcallback = Callback(err_func)
+        self.__callback = out_func
+        self.__errcallback = err_func
         self.__name = None if name is None else str(name)
         # check it make sens :
         if shutil.which(self.args[0]) is None:
