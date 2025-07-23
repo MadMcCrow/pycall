@@ -5,15 +5,20 @@
   ...
 }:
 with pkgs;
-let 
-nixtools = [ nixfmt-rfc-style deadnix ];
+let
+  nixtools = [
+    nixfmt-rfc-style
+    deadnix
+  ];
 
-in 
+in
 mkShell {
-  packages = [  
-    python
-  ] ++ (with python.pkgs; [
-    ccache
-    poetry-core
-  ]);
+  packages =
+    [
+      python
+    ]
+    ++ (with python.pkgs; [
+      ccache
+      poetry-core
+    ]);
 }
