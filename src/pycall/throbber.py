@@ -7,8 +7,6 @@ from concurrent import futures
 
 
 
-
-
 class Throbber() :
     """
     A simple throbber that runs in another thread

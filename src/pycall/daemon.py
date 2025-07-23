@@ -16,7 +16,7 @@ from .throbber import Throbber
 from .output   import Output
 
 
-class Command() :
+class Daemon() :
     """
     Class for making shell calls asynchronously
     """
@@ -34,26 +34,33 @@ class Command() :
         # check it make sens :
         if shutil.which(self.args[0]) is None:
             raise RuntimeError(f"{self.args[0]} : command not found")
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(self._asyncrun)
 
-    async def asyncrun(self) :
+    def is_running(self) -> bool :
+        """
+            returns true if process is still running
+        """
+        return self.ps.returncode is None
+
+    async def _asyncrun(self) -> None :
         """
             run command in a separate task/process
         """
         th = Throbber()
         self._out = Output(self.args, self.__name)
-        ps = asyncio.create_task(self.__async_run_process())
+        ps = asyncio.create_task(self.__process())
         ps.add_done_callback(th.cancel)
         ps.add_done_callback(self._out.close)
-        return await ps
-        
-    async def __async_run_process(self) -> Output :
+
+    async def __process(self) -> int :
+        """ run the actual process """
         _pipe = asyncio.subprocess.PIPE
-        ps = await asyncio.create_subprocess_exec(*self.args, stdout=_pipe, stderr=_pipe)
+        ps = await asyncio.create_subprocess_exec(self.args[0], *self.args[1:], stdout=_pipe, stderr=_pipe)
         async with asyncio.TaskGroup() as tg:
             tg.create_task(self.__read_stream(ps.stdout, [self._out.stdout , self.__callback] ))
             tg.create_task(self.__read_stream(ps.stderr, [self._out.stderr , self.__errcallback ]))
-        rc = await ps.wait()
-        return self._out
+        return await ps.wait()
 
     async def __read_stream(self, stream, cb_list):
         while True:
