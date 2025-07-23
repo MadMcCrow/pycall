@@ -1,7 +1,11 @@
 # simple flake to provide picall to whomever needs it
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    #nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs = {
+      type = "indirect";
+      id = "nixpkgs";
+    };
   };
   outputs =
     { nixpkgs, ... }@inputs:
