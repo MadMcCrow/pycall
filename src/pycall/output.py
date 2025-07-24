@@ -3,10 +3,6 @@
 
 # python
 from datetime import datetime
-import asyncio
-
-# ours
-from .exception import PycallException
 
 # private wrapper function 
 def _time() :
@@ -19,8 +15,7 @@ class Output() :
     __rc = None         # return code
     __end = None        # end time
 
-    def __init__(self, args : str, name = None) -> None:
-        self.name = name
+    def __init__(self, args : str) -> None:
         self.__cmd = ' '.join(args)
         self.__start = _time()
 
@@ -29,6 +24,7 @@ class Output() :
         if self.is_closed() :
             raise RuntimeError("trying to add stdout to closed output")
         self.__out[_time()] = instr
+
 
     def stderr(self, instr : str) -> None :
         if self.is_closed() :
@@ -44,9 +40,11 @@ class Output() :
             res += v + '\n'
         return res
 
-    def is_closed() -> bool : 
+
+    def is_closed(self) -> bool : 
         """ return true if this output is read-only"""
         return self.__end is not None
+
 
     def log(self) -> str :
         """ write as a log """
@@ -61,12 +59,13 @@ class Output() :
         return '\n'.join(l)
 
 
-    def close(self, fut : asyncio.Future) -> None :
+    def close(self, result) -> None :
         """
         close this output
         """
         self.__end = _time()
-        self.__rc = fut.result()
+        self.__rc = result
+
 
     def duration(self) -> float :
         """
