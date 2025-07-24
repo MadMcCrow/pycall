@@ -18,8 +18,8 @@
         "aarch64-linux"
       ];
       # supported pythons :
+      # asyncio runners are available starting with python 3.11
       pythons = [
-        "python310"
         "python311"
         "python312"
       ];
@@ -34,7 +34,19 @@
             python:
             python.override {
               packageOverrides = final: prev: {
-                pycall = final.callPackage ./nix/package.nix { inherit python; };
+                pycall = python.pkgs.buildPythonPackage rec {
+                  pname = "pycall";
+                  version = "0.1.0"; # TODO retrieve from pyproject file !
+                  src = ./src;
+                  pyproject = true;
+                  buildInputs = [ python.pkgs.poetry-core ];
+                  propagatedBuildInputs = buildInputs;
+                  meta = with pkgs.lib; {
+                    licences = [ licences.mit ];
+                    platforms = platforms.x86_64 ++ platforms.aarch;
+                  };
+                };
+
               };
             };
 
