@@ -1,17 +1,35 @@
 #!/usr/bin/env python
 # Class to have async calls to programs
+# The Core of pycall
 
 # default python modules
-from typing import Callable, List
 import shutil, shlex
 import asyncio
+from typing import TypeAlias, TypeVar, Optional
+from collections.abc import Callable
+from inspect import signature
 import locale
+from datetime import datetime
 
 # ours
 from .throbber import Throbber
-from .output   import Output
+from  .output  import Output
 
-class Daemon() :
+
+# aliases :
+# 
+StreamCallback : TypeAlias = Optional[Callable[[str],None]]
+# ideally we would make a better type that can automatically select the correct type
+# adding '| None' for the static type checker (and because it's simpler than Optional)
+# we coud stringify annotation to avoid looping references :
+# from __future__ import annotations
+ReturnCallback : TypeAlias = Callable[[int],None]
+DaemonCallback : TypeAlias = Callable[["Daemon"],None] # stringified : not implemented yet
+OutputCallback : TypeAlias = Callable[[Output],None]
+EndCallback : TypeAlias  = DaemonCallback | OutputCallback | ReturnCallback | None 
+
+
+class Daemon(object) :
     """
         Class for making exec calls asynchronously
         we do not run in a shell, but the process is executed
@@ -21,90 +39,154 @@ class Daemon() :
         instead use the pycall functions
     """
 
-    # class property !
-    __runner = asyncio.Runner()
-
     def __init__(self, cmd, *, 
-            stdout_func : Callable = None,
-            stderr_func : Callable = None,
-            on_end_func : Callable = None ) :
+            stdout_func : StreamCallback = None,
+            stderr_func : StreamCallback = None,
+            on_end_func : EndCallback = None,
+            enable_throbber : bool = True, 
+            name : Optional[str] = None) :
         """ create an run Daemon process """
         # copy arguments :
         self.args = shlex.split(cmd)
+        self.name = name if name is not None else cmd
         self.__stdout_f = stdout_func
         self.__stderr_f  = stderr_func
         self.__cb_f     = on_end_func
-        # initialize result :
-        self.result = None
+        self.__thr = enable_throbber
+        self.__p = None
+        # maybe this needs to be reworked ?
+        self.out = Output(' '.join(self.args))
         # check it make sens :
         if shutil.which(self.args[0]) is None:
             raise RuntimeError(f"{self.args[0]} : command not found")
-
-    def execute(self) -> None:
-        """ add to the list of coroutines to run """
-        runner = type(self)._Daemon__runner
-        fut = runner.run(self._process())
-
-    def run_until_complete(self) -> None:
-        """ run blocking """
-        asyncio.run_until_complete(self._process())
+        # create pre-existing future
+        self._fut = asyncio.Future()
 
 
-    async def task(self) -> None :
-        """ run command in a separate task """
-        ps = asyncio.create_task(self._process())
+    @classmethod
+    def get_runner(cls) -> asyncio.Runner :
+        try : 
+            return cls._runner
+        except AttributeError :
+            cls._runner = asyncio.Runner()
+            return cls._runner
 
 
+    @classmethod
+    def get_throbber(cls) -> Throbber :
+        try : 
+            return cls._throbber
+        except AttributeError :
+            cls._throbber = Throbber()
+            return cls._throbber
+        
 
-    async def _process(self) -> Output :
+    def execute(self) -> Output :
+        """ 
+            Entry Point :
+            runs through a asyncio Runner
+        """
+        runner = type(self).get_runner()
+        self._fut = runner.run(self._process())
+        return self._fut
+
+    async def task(self) -> asyncio.Task :
+        """ 
+            Entry Point :
+             run command in a separate task
+        """
+        self._fut = asyncio.create_task(self._process())
+        return self._fut
+
+
+    async def _process(self) -> None :
         """ 
             run the actual process, along with a throbber,
             an output object and some parsing tasks
         """
-        self.result = None # out is not a future, it either holds the output or not
-        th = Throbber()
-        out = Output(self.args)
+        async def read_stream(stream, *cb_list) -> None :
+            while True:
+                line = await stream.readline()
+                if line:
+                    [cb(line.decode(locale.getencoding())) for cb in cb_list if cb is not None ]
+                else:
+                    break
+        if self.__thr :
+            self.get_throbber().schedule(self)  
         _pipe = asyncio.subprocess.PIPE
         ps = await asyncio.create_subprocess_exec(self.args[0], *self.args[1:], stdout=_pipe, stderr=_pipe)
         # regroup tasks
-        tl = []
-        tl.append(asyncio.create_task(th.display()))
-        tl.append(asyncio.create_task(self.__read_stream(ps.stdout, [out.stdout , self.__stdout_f ] )))
-        tl.append(asyncio.create_task(self.__read_stream(ps.stderr, [out.stderr , self.__stderr_f ] )))
-        fut = await asyncio.gather(*tl)
+        stdout = asyncio.create_task(read_stream(ps.stdout, self.out.stdout , self.__stdout_f ))
+        stderr = asyncio.create_task(read_stream(ps.stderr, self.out.stderr , self.__stderr_f ))
+        fut = asyncio.gather(stdout, stderr)
         # put in a task, to cancel
-        print(f"gather in a task")
-        tk = await asyncio.create_task(ps.wait())
-        tk.add_done_callback(fut.cancel())
-        out.close(ps.returncode)
-        return out
-
-
-    def is_running(self) -> bool :
-        """ returns true if process is still running """
-        return self.result is None
-        
+        tk = asyncio.create_task(ps.wait())
+        tk.add_done_callback(fut.cancel)
+        tk.add_done_callback(self.__on_complete)
+        await tk
+        print("process is done")
 
 
     def __on_complete(self, fut : asyncio.Future ) -> None :
         """ 
             retrieve output and call the finished callbacks upon return
         """
-        self.out = fut.result()
-        print("Daemon has completed")
+        self.out.close(fut.result())
+        self.get_throbber().cancel(self)
         if self.__cb_f is not None :
-            print(f"calling {self.__cb_f}")
-            self.__cb_f(self.result)
+            sig = signature(self.__cb_f)
+            if len(sig.parameters) == 0 :
+                self.__cb_f_()
+            elif len(sig.parameters) > 1 :
+                raise TypeError("'on_end_func' expects a function with one or zero parameter")
+            else :
+                paramtype = list(sig.parameters.values())[0].annotation
+                if paramtype is int : 
+                    self.__cb_f(self.out.return_code())
+                elif paramtype is Output :
+                    self.__cb_f(self.out)
+                elif paramtype is type(self) :
+                    self.__cb_f(self)
+                else : 
+                    # default to Daemon
+                    self.__cb_f(self)
 
-    @staticmethod
-    async def __read_stream(stream, cb_list : List[Callable]) -> None :
-        """ helper method, used to avoid code duplication between stderr and stdout """
-        while True:
-            line = await stream.readline()
-            if line:
-                for cb in cb_list :
-                    if cb is not None :
-                        cb(line.decode(locale.getencoding()))
-            else:
-                break
 
+    @property
+    def progress(self) -> Optional[float] :
+        """
+            progress property can be set by the user
+            by default there's no progress
+        """
+        try : 
+            if self._fut.done() : 
+                return 1.0
+        except :
+            pass
+        finally :
+            return self.__p
+    
+    @progress.setter
+    def progress(self, percent : float) -> None :
+        self.__p  = percent
+    
+
+    def __await__(self) :
+        return self._fut
+
+
+    async def wait(self) :
+        if isinstance(self._fut, asyncio.Future) :
+            await self._fut
+
+
+    def is_running(self) -> bool :
+        return not self._fut.done()
+
+
+    def output(self) -> Output: 
+        return self.out
+
+
+    def rc(self) -> int: 
+          return self.out.return_code()

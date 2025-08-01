@@ -33,13 +33,14 @@
           pythonOverride =
             python:
             python.override {
-              packageOverrides = final: prev: {
-                pycall = python.pkgs.buildPythonPackage rec {
+              packageOverrides = final: prev:
+              with python.pkgs; {
+                pycall = buildPythonPackage rec {
                   pname = "pycall";
                   version = "0.1.0"; # TODO retrieve from pyproject file !
                   src = ./src;
                   pyproject = true;
-                  buildInputs = [ python.pkgs.poetry-core ];
+                  buildInputs = [ poetry-core rich ];
                   propagatedBuildInputs = buildInputs;
                   meta = with pkgs.lib; {
                     licences = [ licences.mit ];

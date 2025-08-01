@@ -1,35 +1,52 @@
 #!/usr/bin/env python
 
 # python
-import shlex
 import asyncio
-from typing import Callable
-
+from typing import Callable, TypeAlias, Optional
 # ours
 from .daemon import Daemon
+from .output import Output
 
+# alias
+Callback : TypeAlias = Optional[Callable]
 
-
-def run(cmd, *, stderr_f : Callable = None, stdout_f : Callable = None, on_end_f : Callable = None) -> None :
+def run(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None, name : Optional[str] = None) -> Daemon :
     """
         run a shell or exec in a background thread and either parse its content or just wait for the result
         this call is not blocking and does not require you use asyncio
     """ 
-    d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f)
+    d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f, name=name)
     d.execute()
+    return d
 
 
-def run_blocking(cmd, *, stderr_f : Callable = None, stdout_f : Callable = None, on_end_f : Callable = None) -> None :
+def run_blocking(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None) -> Output :
     """
         run a shell or exec and wait for the result
     """ 
     d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f)
-    d.run_until_complete()
+    return d.run_until_complete()
 
 
-async def run_async(cmd, *, stderr_f : Callable = None, stdout_f : Callable = None, on_end_f : Callable = None) -> None :
+async def run_async(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None) -> asyncio.Task :
     """
         run a shell or exec as a asyncio task 
     """ 
     d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f)
-    await d.task()
+    return await d.task()
+
+
+def wait(*daemons) :
+    """
+        wait for multiple daemons to complete
+        this is blocking so use carefully
+    """
+    try :
+        loop = asyncio.get_running_loop()
+        for d in daemons :
+            t = asyncio.create_task(d.wait())
+            loop.run_until_complete(t)
+    except RuntimeError : 
+        pass
+    finally:
+        return map(lambda x: x.result, daemons)

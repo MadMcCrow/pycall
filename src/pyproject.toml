@@ -10,6 +10,9 @@ packages = [{include = "pycall"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 
+[tool.poetry.group.richtext.dependencies]
+rich = "*"
+
 [build-system]
 requires = ["poetry-core>=1.9.1,<3.0"]
 build-backend = "poetry.core.masonry.api"
