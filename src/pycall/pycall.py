@@ -10,29 +10,29 @@ from .output import Output
 # alias
 Callback : TypeAlias = Optional[Callable]
 
-def run(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None, name : Optional[str] = None) -> Daemon :
+def run(cmd, **kwargs) -> Daemon :
     """
         run a shell or exec in a background thread and either parse its content or just wait for the result
         this call is not blocking and does not require you use asyncio
     """ 
-    d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f, name=name)
+    d = Daemon(cmd, **kwargs)
     d.execute()
     return d
 
 
-def run_blocking(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None) -> Output :
+def run_blocking(cmd, **kwargs) -> Output :
     """
         run a shell or exec and wait for the result
     """ 
-    d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f)
+    d = Daemon(cmd, **kwargs)
     return d.run_until_complete()
 
 
-async def run_async(cmd, *, stderr_f : Callback = None, stdout_f : Callback = None, on_end_f : Callback = None) -> asyncio.Task :
+async def run_async(cmd, **kwargs) -> asyncio.Task :
     """
         run a shell or exec as a asyncio task 
     """ 
-    d = Daemon(cmd, stdout_func=stdout_f, stderr_func=stderr_f, on_end_func=on_end_f)
+    d = Daemon(cmd, **kwargs)
     return await d.task()
 
 

@@ -41,18 +41,18 @@ class Daemon(object) :
     """
 
     def __init__(self, cmd, *, 
-            stdout_func : StreamCallback = None,
-            stderr_func : StreamCallback = None,
-            on_end_func : EndCallback = None,
+            stdout_f : StreamCallback = None,
+            stderr_f : StreamCallback = None,
+            on_end_f : EndCallback = None,
             enable_throbber : bool = True, 
             name : Optional[str] = None) :
         """ create an run Daemon process """
         # copy arguments :
         self.args = shlex.split(cmd)
         self.name = name if name is not None else cmd
-        self.__stdout_f = stdout_func
-        self.__stderr_f  = stderr_func
-        self.__cb_f     = on_end_func
+        self.__stdout_f = stdout_f
+        self.__stderr_f  = stderr_f
+        self.__cb_f     = on_end_f
         self.__thr = enable_throbber
         self.__p = None
         # maybe this needs to be reworked ?
@@ -108,6 +108,7 @@ class Daemon(object) :
         async def read_stream(stream, *cb_list) -> None :
             while True:
                 line = await stream.readline()
+                logging.info(f"Daemon '{self.name}' : received {stream} : {line}")
                 if line:
                     [cb(line.decode(locale.getencoding())) for cb in cb_list if cb is not None ]
                 else:
@@ -126,7 +127,7 @@ class Daemon(object) :
         tk.add_done_callback(fut.cancel)
         tk.add_done_callback(self.__on_complete)
         await tk
-        
+
 
     def __on_complete(self, fut : asyncio.Future ) -> None :
         """ 
