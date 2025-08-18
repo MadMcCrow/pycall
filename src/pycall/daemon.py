@@ -10,6 +10,7 @@ from collections.abc import Callable
 from inspect import signature
 import locale
 from datetime import datetime
+import logging
 
 # ours
 from .throbber import Throbber
@@ -115,6 +116,7 @@ class Daemon(object) :
             self.get_throbber().schedule(self)  
         _pipe = asyncio.subprocess.PIPE
         ps = await asyncio.create_subprocess_exec(self.args[0], *self.args[1:], stdout=_pipe, stderr=_pipe)
+        logging.info(f"Daemon '{self.name}' : started process")
         # regroup tasks
         stdout = asyncio.create_task(read_stream(ps.stdout, self.out.stdout , self.__stdout_f ))
         stderr = asyncio.create_task(read_stream(ps.stderr, self.out.stderr , self.__stderr_f ))
@@ -124,13 +126,13 @@ class Daemon(object) :
         tk.add_done_callback(fut.cancel)
         tk.add_done_callback(self.__on_complete)
         await tk
-        print("process is done")
-
+        
 
     def __on_complete(self, fut : asyncio.Future ) -> None :
         """ 
             retrieve output and call the finished callbacks upon return
         """
+        logging.info(f"Daemon '{self.name}' : completed")
         self.out.close(fut.result())
         self.get_throbber().cancel(self)
         if self.__cb_f is not None :
@@ -169,6 +171,7 @@ class Daemon(object) :
     @progress.setter
     def progress(self, percent : float) -> None :
         self.__p  = percent
+        logging.info(f"Daemon '{self.name}' : progress set to {self.__p}")
     
 
     def __await__(self) :
