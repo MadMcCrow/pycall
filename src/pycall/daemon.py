@@ -11,6 +11,7 @@ from inspect import signature
 import locale
 from datetime import datetime
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 # ours
 from .throbber import Throbber
@@ -44,17 +45,15 @@ class Daemon(object) :
             stdout_f : StreamCallback = None,
             stderr_f : StreamCallback = None,
             on_end_f : EndCallback = None,
-            enable_throbber : bool = True, 
             name : Optional[str] = None) :
         """ create an run Daemon process """
         # copy arguments :
         self.args = shlex.split(cmd)
-        self.name = name if name is not None else cmd
         self.__stdout_f = stdout_f
         self.__stderr_f  = stderr_f
         self.__cb_f     = on_end_f
-        self.__thr = enable_throbber
         self.__p = None
+        self.update_name(name)
         # maybe this needs to be reworked ?
         self.out = Output(' '.join(self.args))
         # check it make sens :
@@ -64,40 +63,13 @@ class Daemon(object) :
         self._fut = asyncio.Future()
 
 
-    @classmethod
-    def get_runner(cls) -> asyncio.Runner :
-        try : 
-            return cls._runner
-        except AttributeError :
-            cls._runner = asyncio.Runner()
-            return cls._runner
-
-
-    @classmethod
-    def get_throbber(cls) -> Throbber :
-        try : 
-            return cls._throbber
-        except AttributeError :
-            cls._throbber = Throbber()
-            return cls._throbber
-        
-
-    def execute(self) -> Output :
-        """ 
-            Entry Point :
-            runs through a asyncio Runner
+    def run(self) : 
         """
-        runner = type(self).get_runner()
-        self._fut = runner.run(self._process())
-        return self._fut
-
-    async def task(self) -> asyncio.Task :
-        """ 
-            Entry Point :
-             run command in a separate task
+            run in a backround thread
         """
-        self._fut = asyncio.create_task(self._process())
-        return self._fut
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        future = self._executor.submit(asyncio.run, self._process())
+          
 
 
     async def _process(self) -> None :
@@ -108,13 +80,13 @@ class Daemon(object) :
         async def read_stream(stream, *cb_list) -> None :
             while True:
                 line = await stream.readline()
-                logging.info(f"Daemon '{self.name}' : received {stream} : {line}")
+                logging.debug(f"Daemon '{self.name}' : received {stream} : {line}")
                 if line:
                     [cb(line.decode(locale.getencoding())) for cb in cb_list if cb is not None ]
                 else:
                     break
         if self.__thr :
-            self.get_throbber().schedule(self)  
+            Throbber.get_throbber().schedule(self)  
         _pipe = asyncio.subprocess.PIPE
         ps = await asyncio.create_subprocess_exec(self.args[0], *self.args[1:], stdout=_pipe, stderr=_pipe)
         logging.info(f"Daemon '{self.name}' : started process")
@@ -135,7 +107,7 @@ class Daemon(object) :
         """
         logging.info(f"Daemon '{self.name}' : completed")
         self.out.close(fut.result())
-        self.get_throbber().cancel(self)
+        Throbber.get_throbber().cancel(self)
         if self.__cb_f is not None :
             sig = signature(self.__cb_f)
             if len(sig.parameters) == 0 :
@@ -179,9 +151,11 @@ class Daemon(object) :
         return self._fut
 
 
-    async def wait(self) :
-        if isinstance(self._fut, asyncio.Future) :
-            await self._fut
+    def wait(self) :
+        """
+            wait until executor has completed and has returned 
+        """
+        self._executor.shutdown(wait=True, cancel_futures=False)
 
 
     def is_running(self) -> bool :
@@ -194,3 +168,21 @@ class Daemon(object) :
 
     def rc(self) -> int: 
           return self.out.return_code()
+
+
+    def update_name(self, name : Optional[str]) :
+        """
+            make sure the daemon has a unique name
+        """
+        global names
+        name = name if name is not None else self.args[0]
+        try :
+            idx = 0
+            while name in names :
+                name = f"{name}-{idx}"
+                idx += 1
+        except :
+            names = []
+        finally :
+            names.append(name)
+            self.name = name
