@@ -21,6 +21,7 @@ except :
 class Output() :
         """
             Output of a "Daemon" call
+            TODO : rework to simplify and make it core
         """
         
         __out = {}          # output
@@ -55,13 +56,15 @@ class Output() :
 
 
         def is_closed(self) -> bool : 
-            """ return true if this output is read-only"""
+            """ 
+                return true if this output is read-only
+            """
             return self.__end is not None
 
 
         def log(self, *, file : Optional = None) -> None :
             """
-            print log, either with fancy colors or not 
+                print log, either with fancy colors or not 
             """
             try :
                 _console.log(f"[info]{self.__cmd}[\info] started at [date]{self.__start}[\date]")
