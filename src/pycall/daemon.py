@@ -37,7 +37,8 @@ class Daemon(object) :
         you do not need to interact directly with this class,
         instead use the pycall functions
     """
-    
+
+
     def call_on_end(self, cb : ReturnCallback):
         """
             add a callback for the end or call directly
@@ -46,6 +47,7 @@ class Daemon(object) :
             self._end_cb.append(cb)
         else :
             cb(self._fut())
+
 
     def call_on_stdout(self, cb : ReturnCallback):
         """
@@ -115,17 +117,20 @@ class Daemon(object) :
         self._fut.add_done_callback(self.__on_complete)
         return self._fut 
 
+
     def __stdout(self, stream) :
         self._out += stream
         logging.debug(f"{self.name} # STDOUT : {stream}")
         for cb in self._stderr_cb :
             cb(stream)
 
+
     def __stderr(self, stream) :
         self._out += stream
         logging.warning(f"{self.name} # STDERR : {stream}")
         for cb in self._stdout_cb :
             cb(stream)
+
 
     def __on_complete(self, fut : asyncio.Future ) -> None :
         """ 
@@ -168,7 +173,7 @@ class Daemon(object) :
     def progress(self, percent : float) -> None :
         self.__p  = percent
         logging.info(f"Daemon '{self.name}' : progress set to {self.__p}")
-    
+
 
     def __await__(self) :
         try :
@@ -220,6 +225,7 @@ class Daemon(object) :
         if shutil.which(args[0]) is None:
             raise RuntimeError(f"{args[0]} : command not found")
         self.args = args
+
 
     def __str__(self) :
         return self.name
