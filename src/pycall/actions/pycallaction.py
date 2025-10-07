@@ -70,7 +70,7 @@ class PyCallAction(PyAction) :
 
     def __init__(   self,  cmd : PyCmd, *,
                     dependencies : List["PyAction"] = [],                   # as documented in super
-                    callbacks : List[(CB_Progress || CB_Stream)]= []) :     # will called when either stdout 
+                    callbacks : List[(CB_Progress | CB_Stream)]= []) :     # will called when either stdout 
         """
             create an Action with dependencies to do first and a coroutine to execute
 
@@ -81,6 +81,7 @@ class PyCallAction(PyAction) :
         """
         super().__init__( dependencies = dependencies, coro = self._call, mode = Execution.PROCESS)
         self._cmd = cmd
+        self._cbs = callbacks
 
     
     async def _call(self) :
@@ -111,9 +112,15 @@ class PyCallAction(PyAction) :
 
 
     async def __stdout(self, in_str : str) :
-        pass
+        for cb in self.pcbs :
+            ret = cb([in_str,None])
+            if isinstance(ret,float) :
+                self.progress = ret
 
     async def __stdout(self, in_str : str) :
-        pass
+        for cb in self.pcbs :
+            ret = cb([None,in_str])
+            if isinstance(ret,float) :
+                self.progress = ret
 
         

@@ -87,35 +87,7 @@ class Daemon(object) :
         self._fut = None
 
 
-    async def _process(self) -> None :
-        """ 
-            run the actual process, along with a throbber (progress),
-            an output object and some parsing tasks
-        """
-        # inner function to get from stream to string
-        async def read_stream(stream, cb) -> None :
-            while True:
-                line = await stream.readline()
-                logging.debug(f"Daemon '{self.name}' : received {stream} : {line}")
-                if line:
-                    cb(line.decode(locale.getencoding()))
-                else:
-                    break
-        # start the subprocess
-        _pipe = asyncio.subprocess.PIPE
-        ps = await asyncio.create_subprocess_exec(self.args[0], *self.args[1:], stdout=_pipe, stderr=_pipe)
-        logging.info(f"Daemon '{self}' : started process")
-        # starting the progressbar
-        Progress().schedule(self)
-        # regroup parsing task
-        stdout = asyncio.create_task(read_stream(ps.stdout, self.__stdout))
-        stderr = asyncio.create_task(read_stream(ps.stderr, self.__stderr))
-        fut = asyncio.gather(stdout, stderr)
-        # add callbacks
-        self._fut  = asyncio.create_task(ps.wait())
-        self._fut.add_done_callback(fut.cancel)
-        self._fut.add_done_callback(self.__on_complete)
-        return self._fut 
+  
 
 
     def __stdout(self, stream) :

@@ -83,7 +83,7 @@ class PyAction(object) :
         if self._coro is not None :
             selftask = asyncio.create_task(self._coro)        
             await selftask
-        
+        self.on
         self._status = Status.DONE
 
 
